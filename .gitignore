@@ -1,0 +1,6 @@
+core
+*~
+*bak
+*.o
+radioclkd
+

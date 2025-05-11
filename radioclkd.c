@@ -29,6 +29,10 @@
  *          future.
  *
  * $Log: radioclkd.c,v $
+ * Revision 2.6  2022/11/29 23:37:14  gdr
+ * fixes for 64 bit
+ * add foreground flag to run the actual service in a foreground monitoring process
+ *
  * Revision 2.5  2003/01/20 16:48:33  jab
  * stricter testing of received WWVB code for errors
  * reject received times that differ by 1000 secs from system time
@@ -129,7 +133,7 @@ static const char rcsid[]="$Id: radioclkd.c,v 2.5 2003/01/20 16:48:33 jab Exp ja
 /*
  * NTPD shared memory reference clock driver structure
  */
-#define SHMKEY 0x4e545030
+#define SHMKEY 0x4e545030 /* 'NTP0' */
 struct shmTime {
 	int     mode;
 	int     count;
@@ -171,6 +175,7 @@ struct clockInfo {
 int serial;
 int poll;
 int test;
+int foreground; // GDR - 2022-11-29
 jmp_buf saved;
 struct clockInfo dcd,cts,dsr;
 
@@ -183,16 +188,18 @@ enum { LEAP_NOWARNING=0x00, LEAP_NOTINSYNC=0x03};
 #define PRECISION (-10)
 
 #define VERSION_STRING "\
-radioclkd version 1.0\n\
-Copyright (c) 2001-03 Jonathan A. Buzzard <jonathan@buzzard.org.uk>\n"
+radioclkd version 2.6-x64-alpha\n\
+Copyright (c) 2001-03 Jonathan A. Buzzard <jonathan@buzzard.org.uk>\n\
+64-bit fix GDR 20221129\n"
 
 #define USAGE_STRING "\
 Usage: radioclkd [-t] [-p] device\n\
 Decode the time from a radio clock(s) attached to a serial port\n\n\
-  -t,--test     print pulse lengths and times to stdout\n\
-  -p,--poll     poll the serial port instead of using interrupts\n\
-  -h,--help     display this help message\n\
-  -v,--version  display version\n\
+  -f,--foreground     print pulse lengths and times to stdout\n\
+  -t,--test           print pulse lengths and times to stdout\n\
+  -p,--poll           poll the serial port instead of using interrupts\n\
+  -h,--help           display this help message\n\
+  -v,--version        display version\n\
 Report bugs to jonathan@buzzard.org.uk\n"
 
 
@@ -211,6 +218,11 @@ time_t UTCtime(struct tm *timeptr)
 	for (bits=0,timep=1;timep>0;bits++,timep<<=1)
 		;
 
+	//fprintf(stdout, "UTCtime - cp1: bits = %d, timep = %ld (GDR)\n", bits, timep);
+        /* GDR -2022-11-29 - if more than 31 bits calculated, cap at 31 */
+	if (bits>31)
+		bits = 31;
+
 	/* if time_t is signed, 0 is the median value else 1<<bits is median */
 	timep = (timep<0) ? 0 : ((time_t) 1<<bits);
 
@@ -218,21 +230,32 @@ time_t UTCtime(struct tm *timeptr)
 	secs = timeptr->tm_sec;
 	timeptr->tm_sec = 0;
 
+	//fprintf(stdout, "UTCtime - cp2: secs = %02d (GDR)\n", secs);
 	/* binary search of the time space using the system gmtime() function */
 	for (;;) {
+		//fprintf(stdout, "UTCtime - cp3, timep = %ld (GDR)\n", timep);
 	        search = *gmtime(&timep);
 
+		//fprintf(stdout, "UTCtime - cp4: (GDR)\n");
+		//fprintf(stdout, "search.tm_year=%d, timeptr->tm_year=%d (GDR)\n", search.tm_year, timeptr->tm_year);
+		//fprintf(stdout, "search.tm_mon=%d, timeptr->tm_mon=%d (GDR)\n", search.tm_mon, timeptr->tm_mon);
+		//fprintf(stdout, "search.tm_mday=%d, timeptr->tm_mday=%d (GDR)\n", search.tm_mday, timeptr->tm_mday);
 		/* compare the two times down to the same day */
 		if (((direction = (search.tm_year-timeptr->tm_year))==0) &&
 		    ((direction = (search.tm_mon-timeptr->tm_mon))==0))
 			direction = (search.tm_mday-timeptr->tm_mday);
 
-		/* compare the rest of the way if necesary */
+		//fprintf(stdout, "UTCtime - cp5: direction = %d (GDR)\n", direction);
+		//fprintf(stdout, "search.tm_hour=%d, timeptr->tm_hour=%d (GDR)\n", search.tm_hour, timeptr->tm_hour);
+		//fprintf(stdout, "search.tm_min=%d, timeptr->tm_min=%d (GDR)\n", search.tm_min, timeptr->tm_min);
+		//fprintf(stdout, "search.tm_sec=%d, timeptr->tm_sec=%d (GDR)\n", search.tm_sec, timeptr->tm_sec);
+		/* compare the rest of the way if necessary */
 		if (direction==0) {
 			if (((direction = (search.tm_hour-timeptr->tm_hour))==0) &&
 			    ((direction = (search.tm_min-timeptr->tm_min))==0))
 				direction = search.tm_sec-timeptr->tm_sec;
 		}
+		//fprintf(stdout, "UTCtime - cp6: direction = %d (GDR)\n", direction);
 
 		/* is the search complete? */
 		if (direction==0) {
@@ -248,6 +271,7 @@ time_t UTCtime(struct tm *timeptr)
 			else
 				timep += (time_t) 1 << bits;
 		}
+		//fprintf(stdout, "UTCtime - cp7: loop continues, timep = %ld (GDR)\n", timep);
 	}
 
 	return -1;
@@ -299,6 +323,12 @@ time_t DecodeDCF77(char *code, int length)
 	decoded.tm_sec = 0;
 	decoded.tm_isdst = 0;
 
+	/* comment out to reduce timing delays in foreground operation */
+	//if (foreground!=0)
+		//fprintf(stdout, "DCF77: %04d-%02d-%02d (%d) %02d:%02d:%02d (GDR)\n", 
+		//decoded.tm_year+1900, decoded.tm_mon, decoded.tm_mday, decoded.tm_wday,
+		//decoded.tm_hour, decoded.tm_min, decoded.tm_sec);
+
 	/* some extra sanity checks */
 	if ((decoded.tm_min>59) || (decoded.tm_hour>23) ||
 			(decoded.tm_wday>6) || (decoded.tm_mday>31) ||
@@ -323,6 +353,7 @@ time_t DecodeMSF(char *code, int length)
 
 
 	/* check the parity bits */
+	//fprintf(stdout, "decode MSF; parity test (GDR)\n");
 	k = length-44;
 	for(i=0;i<4;i++) {
 		sum = (code[length-7+i]==2) ? 1 : 0;
@@ -333,6 +364,7 @@ time_t DecodeMSF(char *code, int length)
 	}
 
 	/* calculate all the individual BCD segments */
+	//fprintf(stdout, "decode MSF; BCD decode (GDR)\n");
 	k = length-44;
 	for(i=0;i<11;i++) {
 		sum = 0;
@@ -342,6 +374,7 @@ time_t DecodeMSF(char *code, int length)
 	}
 
 	/* decode the BCD segments into the time */
+	//fprintf(stdout, "decode MSF; BCD segments to time struct (GDR)\n");
 	decoded.tm_year = 100+(segment[0]*10)+segment[1];
 	decoded.tm_mon = (segment[2]*10)+segment[3]-1;
 	decoded.tm_mday = (segment[4]*10)+segment[5];
@@ -350,14 +383,21 @@ time_t DecodeMSF(char *code, int length)
 	decoded.tm_min = (segment[9]*10)+segment[10];
 	decoded.tm_sec = 0;
 	decoded.tm_isdst = 0;
+	/* comment out to reduce timing delays */
+	//if (foreground!=0)
+		//fprintf(stdout, "MSF: %04d-%02d-%02d (%d) %02d:%02d:%02d (GDR)\n", 
+		//decoded.tm_year+1900, decoded.tm_mon+1, decoded.tm_mday, decoded.tm_wday,
+		//decoded.tm_hour, decoded.tm_min, decoded.tm_sec);
 
 	/* some extra sanity checks */
+	//fprintf(stdout, "decode MSF; final sanity check [-1] (GDR)\n");
 	if ((decoded.tm_min>59) || (decoded.tm_hour>23) ||
 			(decoded.tm_wday>6) || (decoded.tm_mday>31) ||
 			(decoded.tm_mon>11) ||(decoded.tm_year>199))
 		return -1;
 
 	/* return adjusted for daylight savings */
+	//fprintf(stdout, "decode MSF; return daylight adjusted UTC (GDR)\n");
 	return (UTCtime(&decoded)-((code[length-3]==2) ? 3600 : 0));
 }
 
@@ -636,7 +676,8 @@ int CalculatePPSAverage(struct clockInfo *c, int *average)
 	}
 
 	/* now sort them into order */
-	qsort(timediff, 59, sizeof(long), TimeCompare);
+	//GDR - 20221130 - fix - qsort(timediff, 59, sizeof(long), TimeCompare);
+	qsort(timediff, 59, sizeof(int), TimeCompare);
 
 	/* calculate the arithmetic mean of the middle half */
 	count = 0;
@@ -661,6 +702,8 @@ void ProcessTimeCode(struct clockInfo *c, int radio)
 	int i,shmid,average;
 
 
+/* progress: print time decode */
+
 	/* decode the time */
 	switch (radio) {
 		case DCF77:
@@ -680,10 +723,14 @@ void ProcessTimeCode(struct clockInfo *c, int radio)
 			return;
 	}
 
+/* progress: push decoded time to SHM */
+
 	/* place time stamp into shared memory segment or print on stdout */	
 	if (test==0) {
 		/* final sanity check on the time */
 		if (abs(c->start.tv_sec-decoded)>1000) {
+        		if ((test!=0)||(foreground!=0))
+				fprintf(stdout, "sanity check failed; update aborted (GDR)\n");
 			syslog(LOG_INFO, "decoded time differs from system "
 				"time by more than 1000s ignored");
 			c->count = 1;
@@ -732,10 +779,17 @@ void ProcessTimeCode(struct clockInfo *c, int radio)
 			syslog(LOG_INFO, " %ldm since previous valid time for %s"
 				" line", last/60, c->line);
 		}
-	} else {
+	}
+
+	/* Update to screen - GDR 2022-11-29 */
+	if ((test!=0) || (foreground!=0)) {
 		/* any valid time is printed in testing mode */
-		for (i=1;i<c->count;i++)
+		fprintf(stdout, "test output:\n");
+		for (i=1;i<c->count;i++) {
 			fprintf(stdout, "%1d", c->code[i]);
+			if (i%5==0)
+				fprintf(stdout, " ");
+		}
 		fprintf(stdout, "\nUTC: %s", ctime(&decoded));
 	}
 
@@ -897,6 +951,7 @@ int main(int argc, char *argv[])
 	/* process the command line arguments */
 	poll = 0;
 	test = 0;
+	foreground = 0;
 	for (i=1;i<argc;i++) {
 		if ((!strcmp(argv[i], "-h")) || (!strcmp(argv[i], "--help"))) {
 			fprintf(stdout, USAGE_STRING);
@@ -904,6 +959,8 @@ int main(int argc, char *argv[])
 		} else if ((!strcmp(argv[i], "-v")) || (!strcmp(argv[i], "--version"))) {
 			fprintf(stdout, VERSION_STRING);
 			exit(0);
+		} else if ((!strcmp(argv[i], "-f")) || (!strcmp(argv[i], "--foreground"))) {
+			foreground = 1;
 		} else if ((!strcmp(argv[i], "-p")) || (!strcmp(argv[i], "--poll"))) {
 			poll = 1;
 		} else if ((!strcmp(argv[i], "-t")) || (!strcmp(argv[i], "--test"))) {
@@ -968,51 +1025,68 @@ int main(int argc, char *argv[])
 
 		/* now looks like a good time to become a daemon */
 
- 		/* parent */
- 		if ((pid=fork())) {
- 			if ((str=fopen(PID_FILE, "w"))) {
- 				fprintf(str, "%d\n", pid);
- 				fclose(str);
+		if (foreground==0) {
+ 			/* parent */
+ 			if ((pid=fork())) {
+ 				if ((str=fopen(PID_FILE, "w"))) {
+ 					fprintf(str, "%d\n", pid);
+ 					fclose(str);
+ 				}
+ 				close(serial);
+ 				return 0;
  			}
- 			close(serial);
- 			return 0;
- 		}
  
- 		/* child */
- 		if (pid!=0) {
- 			syslog(LOG_INFO, "fork() failed: %m");
- 			unlink(PID_FILE);
- 			close(serial);
- 			return 1;
- 		} else {
- 			syslog(LOG_INFO, "entering daemon mode");
- 		}
- 	
- 		/* child - Follow the daemon rules in W. Richard Stevens.
- 		   Advanced Programming in the UNIX Environment (Addison-Wesley
- 		   Publishing Co., 1992). Page 417.). */
- 		if (setsid()<0) {
- 			syslog(LOG_INFO, "setsid() failed: %m");
- 			unlink(PID_FILE);
- 			close(serial);
- 			return 1;
- 		}
+ 			/* child */
+ 			if (pid!=0) {
+ 				syslog(LOG_INFO, "fork() failed: %m");
+ 				unlink(PID_FILE);
+ 				close(serial);
+ 				return 1;
+ 			} else {
+ 				syslog(LOG_INFO, "entering daemon mode");
+ 			}
+ 
+ 			/* child - Follow the daemon rules in W. Richard Stevens.
+ 		   	Advanced Programming in the UNIX Environment (Addison-Wesley
+ 		   	Publishing Co., 1992). Page 417.). */
+ 			if (setsid()<0) {
+ 				syslog(LOG_INFO, "setsid() failed: %m");
+ 				unlink(PID_FILE);
+ 				close(serial);
+ 				return 1;
+ 			}
+		} else {
+ 			syslog(LOG_INFO, "in foreground mode");
+			fprintf(stdout, "%s\n", VERSION_STRING);
+			fprintf(stdout, "Remaining in foreground\n");
+		}
 
 		/* set realtime scheduling priority */
 		memset(&schedp, 0, sizeof(schedp));
 		schedp.sched_priority = sched_get_priority_max(SCHED_FIFO);	
-		if (sched_setscheduler(0, SCHED_FIFO, &schedp)!=0)
-			syslog(LOG_INFO, "error unable to set real time "
-				"scheduling");
+		if (sched_setscheduler(0, SCHED_FIFO, &schedp)!=0) {
+			syslog(LOG_INFO, "error unable to set real time scheduling");
+		} else {
+			syslog(LOG_INFO, "real time scheduling set");
+		}
 
 		/* lock all memory pages */
-		if (mlockall(MCL_CURRENT | MCL_FUTURE) !=0)
+		if (mlockall(MCL_CURRENT | MCL_FUTURE) !=0) {
 			syslog(LOG_INFO, "error unable to lock memory pages");
+		} else {
+			syslog(LOG_INFO, "memory pages locked successfully");
+		}
 	
 	}
 
 	/* pause a few seconds to allow receiver(s) to power up */
+	if (!foreground==0) {
+		fprintf(stdout, "5 second sleep to start device");
+		fflush(stdout);
+	}
 	sleep(5);
+	if (!foreground==0)
+		fprintf(stdout, " - done\n");
 
 	/* some safety precautions */
 	chdir("/");
@@ -1045,7 +1119,8 @@ int main(int argc, char *argv[])
 		ProcessStatusChange(&dsr, (arg & TIOCM_DSR), &tv);
 
 		/* print pulse information on stdout if in test mode */
-		if ((test==1) && ((dcd.status==1) || (cts.status==1) || (dsr.status==1))) {
+		//if ((test==1) && ((dcd.status==1) || (cts.status==1) || (dsr.status==1))) {
+		if (((test!=0) || (foreground!=0)) && ((dcd.status==1) || (cts.status==1) || (dsr.status==1))) {
 			PrintPulseInfo(&dcd);
 			PrintPulseInfo(&cts);
 			PrintPulseInfo(&dsr);
