@@ -1,6 +1,6 @@
-This project is now very long in the tooth (22 years long in the tooth).  
+*This project is now very long in the tooth (22 years long in the tooth).  
 Additional notes and updates 2025 by Gulraj Rijhwani - aka Camopants - and 
-annotated "[GR]".
+annotated "[GR]".*
 
 This is a simple daemon for a computer running Linux to decode the DCF77,
 MSF or WWVB time signal from a receiver which pulls the DCD, CTS or DSR pin of
@@ -33,14 +33,14 @@ or the Internet Archive capture of same:
 If you have problems getting the software to work using interrupts the
 following command is known to resolve the problem in many instances.
 
-```sh
+```
      stty crtscts < /dev/ttyS0
 ```
 
 where ttyS0 is the serial port the receiver is connected to. You may also want
 to try running
 
-```sh
+```
      watch -n 1 cat /proc/interrupts.
 ```
 
