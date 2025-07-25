@@ -1,3 +1,16 @@
+2025-05-11  Gulraj Rijhwani  <gdr+radioclkd@courtfields.com>
+
+        * placeholder for additional notes, in a separate file, on running 
+	successfully on an enforcing SELinux platform.
+
+	* placeholder for additional notes for creating a systemd service
+
+2022-11-30  Gulraj Rijhwani  <gdr+radioclkd@courtfields.com>
+
+	* radioclkd.c: foreground running option added, inline debugging code 
+	added and subsequently commented out; corrected to run on 64 bit 
+	architecture
+
 2003-01-20  Jonathan Buzzard  <jab@jelly>
 
 	* radioclkd.c: stricter testing of received WWVB code for errors

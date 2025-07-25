@@ -1,0 +1,3 @@
+radioclkd can be made to work within SELinux constraints, but will not out of the box.
+
+These notes - with included policies, perhaps - will demonstrate how.  Work yet to progress.
