@@ -3,7 +3,7 @@ To create a service under systemd first address any SELinux issues (notes elsewh
 
 
 ## Creating the systemd service
-The following instructions assume that the daemon binary is installed at *<pre>/usr/local/sbin/radioclkd</pre>*.  (Why would you install it anywhere else?)  If this is not the case, then the service file will need to be altered accordingly.
+The following instructions assume that the daemon binary is installed at *<code>/usr/local/sbin/radioclkd</code>*.  (Why would you install it anywhere else?)  If this is not the case, then the service file will need to be altered accordingly.
 
 ### Create the service definition
 Copy the service definition file into systemd's service catalogue, and set ownership/permissions appropriately
@@ -52,7 +52,7 @@ should result in a response similar to
 ### Persistence
 To enable automatic starting of the daemon at boot time
 ```
-systemctl start radioclkd.service
+systemctl enable radioclkd.service
 ```
 
 ### Caveat
