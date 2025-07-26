@@ -1,0 +1,26 @@
+[Unit]    
+Description=Start radio clock daemon
+After=network.target
+Requires=ntpd.service
+StartLimitIntervalSec=0
+
+[Service]
+#Type=simple
+Type=forking
+EnvironmentFile=/etc/sysconfig/radioclkd
+Restart=always
+RestartSec=1
+#User=serviceuser
+#User=ntp
+ExecStartPre=-/bin/mkdir -p /run/radioclkd
+ExecStartPre=/bin/chmod -R 755 /run/radioclkd
+ExecStart=/usr/local/sbin/radioclkd ${DEVICE}
+ExecStartPost=
+ExecStop=
+ExecReload=
+PIDFile=radioclkd.pid
+
+[Install]
+WantedBy=multi-user.target
+Alias=radioclkd.service
+
