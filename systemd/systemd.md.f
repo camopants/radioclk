@@ -1,12 +1,17 @@
-To create a service under systemd first address any SELinux issues (notes elsewhere in this repo).  Once the program starts manually 
+To create a service under systemd first address any SELinux issues (notes el
+sewhere in this repo).  Once the program starts manually 
 
 
 
 ## Creating the systemd service
-The following instructions assume that the daemon binary is installed at *<pre>/usr/local/sbin/radioclkd</pre>*.  (Why would you install it anywhere else?)  If this is not the case, then the service file will need to be altered accordingly.
+The following instructions assume that the daemon binary is installed at *<p
+re>/usr/local/sbin/radioclkd</pre>*.  (Why would you install it anywhere els
+e?)  If this is not the case, then the service file will need to be altered 
+accordingly.
 
 ### Create the service definition
-Copy the service definition file into systemd's service catalogue, and set ownership/permissions appropriately
+Copy the service definition file into systemd's service catalogue, and set o
+wnership/permissions appropriately
 ```
 sudo cp radioclkd.service /etc/systemd/system/
 sudo chown root:root /etc/systemd/system/radioclkd.service
@@ -56,4 +61,5 @@ systemctl start radioclkd.service
 ```
 
 ### Caveat
-As it currently stands, the radio clock daemon is invoked by systemd as root, and continues to run that way, without dropping privileges.
+As it currently stands, the radio clock daemon is invoked by systemd as root, 
+and continues to run that way, without dropping privileges.
