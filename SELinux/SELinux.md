@@ -48,7 +48,7 @@ $ ls -lZ /usr/local/sbin/radioclkd
 ## Policy installation
 ### create new
 <pre>
-n=ntp_shm_policy
+n=ntpp_shm_policy
 vi ${n}.te
 </pre>
 

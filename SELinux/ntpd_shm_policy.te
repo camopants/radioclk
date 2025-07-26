@@ -1,0 +1,15 @@
+
+module ntpd_shm_policy 1.0;
+
+require {
+	type unconfined_service_t;
+	type ntpd_t;
+	class shm { associate read write };
+	class shm { unix_read unix_write };
+}
+
+#============= ntpd_t ==============
+
+allow ntpd_t unconfined_service_t:shm associate;
+allow ntpd_t unconfined_service_t:shm { read write };
+allow ntpd_t unconfined_service_t:shm { unix_read unix_write };

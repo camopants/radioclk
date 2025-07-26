@@ -28,12 +28,11 @@ sudo systemctl stop radioclkd
 ```
 
 ### Testing
+Once started
 ```
 systemctl status radioclkd
 ```
-
-should result in a response similar to
-
+should yield a response similar to
 ```
 ● radioclkd.service - Start radio clock daemon
      Loaded: loaded (/etc/systemd/system/radioclkd.service; enabled; preset: disabled)
